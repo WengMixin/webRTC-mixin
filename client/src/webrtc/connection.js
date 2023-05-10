@@ -2,7 +2,7 @@ import adapter from "webrtc-adapter";
 
 console.log(adapter.browserDetails.browser);
 
-import { rtcConfiguration } from "./configuration";
+import { getRtcConfiguration } from "./configuration";
 import { signal_user } from "../client-socket";
 
 const receive_message = (event) => {
@@ -17,10 +17,11 @@ class RTCConnection {
     this.isHost = null;
   }
 
-  start(iceServers, peer_id, isHost) {
+  async start(peer_id, isHost) {
     if (peer_id != null) this.peer_id = peer_id;
 
-    this.peerConnection = new RTCPeerConnection(iceServers);
+    const rtcConfig = await getRtcConfiguration();
+    this.peerConnection = new RTCPeerConnection(rtcConfig);
 
     this.peerConnection.onicecandidate = (event) => {
       console.log("FOUND ICE CANDIDATE!");
@@ -54,18 +55,24 @@ class RTCConnection {
     }
 
     this.peerConnection.ontrack = (event) => {
-      console.log(`TRACK EVENT! with  ${event.streams.length} streams ${this.peer_id}`);
+      console.log(
+        `TRACK EVENT! with  ${event.streams.length} streams ${this.peer_id}`
+      );
 
       if (connection.remoteStreams[this.peer_id] === undefined) {
         connection.remoteStreams[this.peer_id] = event.streams[0];
-        connection.eventTarget.dispatchEvent(new CustomEvent("new-video", { detail: event.streams[0] }));
+        connection.eventTarget.dispatchEvent(
+          new CustomEvent("new-video", { detail: event.streams[0] })
+        );
       }
     };
   }
 
   setupDataChannel() {
-    this.dataChannel.onopen = () => console.log(`Connected to peer ${this.peer_id}`);
-    this.dataChannel.onclose = () => console.log(`Disconnected to peer ${this.peer_id}`);
+    this.dataChannel.onopen = () =>
+      console.log(`Connected to peer ${this.peer_id}`);
+    this.dataChannel.onclose = () =>
+      console.log(`Disconnected to peer ${this.peer_id}`);
     this.dataChannel.onmessage = receive_message;
     this.peerConnection.onconnectionstatechange = () =>
       console.log(`Something changed in peer ${this.peer_id}`);
@@ -85,7 +92,9 @@ class RTCConnection {
     if (data.ice) {
       this.peerConnection.addIceCandidate(new RTCIceCandidate(data.ice));
     } else if (data.sdp) {
-      await this.peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+      await this.peerConnection.setRemoteDescription(
+        new RTCSessionDescription(data.sdp)
+      );
       if (this.peerConnection.remoteDescription.type === "offer") {
         const offer = await this.peerConnection.createAnswer();
         await this.localDescCreated(offer);
@@ -95,7 +104,8 @@ class RTCConnection {
 
   //assumes message is already a string
   send(message) {
-    if (this.dataChannel == null || this.dataChannel.readyState !== "open") return;
+    if (this.dataChannel == null || this.dataChannel.readyState !== "open")
+      return;
     this.dataChannel.send(message);
   }
 }
@@ -113,12 +123,14 @@ export const connection = {
       // Create a new RTCConnection object
       const newConn = new RTCConnection();
       this.peers[data.from] = newConn;
-      newConn.start(rtcConfiguration, data.from, true);
+      newConn.start(data.from, true);
 
       if (this.stream != null) {
         this.stream
           .getTracks()
-          .forEach((track) => newConn.peerConnection.addTrack(track, this.stream));
+          .forEach((track) =>
+            newConn.peerConnection.addTrack(track, this.stream)
+          );
       }
     }
 
@@ -131,12 +143,14 @@ export const connection = {
 
       const newConn = new RTCConnection();
       this.peers[socket] = newConn;
-      newConn.start(rtcConfiguration, socket, false);
+      newConn.start(socket, false);
 
       if (this.stream != null) {
         this.stream
           .getTracks()
-          .forEach((track) => newConn.peerConnection.addTrack(track, this.stream));
+          .forEach((track) =>
+            newConn.peerConnection.addTrack(track, this.stream)
+          );
       }
     });
   },
